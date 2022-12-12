@@ -1,116 +1,7 @@
 #include <Keypad.h>             // library for keyboard
 #include<LiquidCrystal.h>
 #include <string.h> 
-
-#define MAX_PASSWORD_LENGTH 20
-#define STRING_TERMINATOR '\0'
-
-class Password {
-public:
-	Password(char* pass);
-	
-	void set(char* pass);
-	bool is(char* pass);
-	bool append(char character);
-	void reset();
-	bool evaluate();
-	
-	//char* getPassword();
-	//char* getGuess();
-	
-	//operators
-	Password &operator=(char* pass);
-	bool operator==(char* pass);
-	bool operator!=(char* pass);
-	Password &operator<<(char character);
-	
-private:
-	char* target;
-	char guess[ MAX_PASSWORD_LENGTH ];
-	byte currentIndex;
-};
-
-
-
-//construct object in memory, set all variables
-Password::Password(char* pass){
-	set( pass );
-	reset();
-}
-
-//set the password
-void Password::set(char* pass){
-	target = pass;
-}
-
-//evaluate a string, is it equal to the password?
-bool Password::is(char* pass){ 
-	byte i=0;
-	while (*pass && i<MAX_PASSWORD_LENGTH){
-		guess[i] = pass[i];
-		i++;
-	}
-	return evaluate();
-}
-
-//append a char to the guessed password
-bool Password::append(char character){ 
-	if (currentIndex+1==MAX_PASSWORD_LENGTH){
-		return false;
-	}else{
-		guess[currentIndex++] = character;
-		guess[currentIndex] = STRING_TERMINATOR; //ensure a valid c string
-	}
-	return true;
-}
-
-//reset the guessed password, one can guess again
-void Password::reset(){ 
-	currentIndex = 0;
-	guess[currentIndex] = STRING_TERMINATOR;
-}
-
-//is the current guessed password equal to the target password?
-bool Password::evaluate(){ 
-	char pass = target[0];
-	char guessed = guess[0];
-	for (byte i=1; i<MAX_PASSWORD_LENGTH; i++){
-		
-		//check if guessed char is equal to the password char
-		if (pass==STRING_TERMINATOR && guessed==STRING_TERMINATOR){
-			return true; //both strings ended and all previous characters are equal 
-		}else if (pass!=guessed || pass==STRING_TERMINATOR || guessed==STRING_TERMINATOR){
-			return false; //difference OR end of string has been reached
-		}
-		
-		//read next char
-		pass = target[i];
-		guessed = guess[i];
-	}
-	return false; //a 'true' condition has not been met
-}
-
-//set password using operator =
-Password &Password::operator=(char* pass){
-	set( pass );
-	return *this;
-}
-
-//test password using ==
-bool Password::operator==(char* pass){
-	return is( pass );
-}
-
-//test password using !=
-bool Password::operator!=(char* pass){
-	return !is( pass );
-}
-
-//append to currently guessed password using operator <<
-Password &Password::operator<<(char character){
-	append( character );
-	return *this;
-}
+#include <Password.h>
 
 Password password = Password("1234");  // password
 String psw_to_print; 
@@ -137,25 +28,37 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 #define buzzer A4
 
 int sensorData;
-bool siren_activated = 0;
-int ledBlink;
-bool blinking = 0;
-bool sistem = 0; // 0 for off, 1 for on 
-double time_wrong_psw = 10000000000.;
-double actual_time;
-
 LiquidCrystal lcd (0,1,2,3,4,5);
+
+// Create a variable to store the current time
+unsigned long currentMillis;
+// Create a variable to store the previous time the LED was updated
+unsigned long previousMillis = 0;
+unsigned long time_change_case;
+State STATE = State::OFFLINE;
+State previous_STATE;
+State next_STATE;
+char is_psw_correct = 0;
+unsigned long time_buzzer;
+unsigned long time_buzzer_prev = 0;
+
+
+enum class State {
+  OFFLINE, // initial state
+  WAITING, // waiting state
+  PIR_ACTIVATED, // PIR sensor is active
+  BUZZER_ACTIVATED, // BUZZER is active
+  INCORRECT // password is incorrect
+};
 
 void setup()
   {
   keypad.addEventListener(keypadEvent);
-  //Serial.begin(9600);  //Used for troubleshooting
   pinMode(sensorz, INPUT);
   pinMode(redLed, OUTPUT);
   pinMode(yellowLed, OUTPUT);
   pinMode(greenLed, OUTPUT);
   pinMode(buzzer, OUTPUT); 
-  //Serial.println("sistem startup"); //Used for troubleshooting
   lcd.begin(16,2);
   lcd.setCursor(0,0);
   lcd.print("ALARM OFF");
@@ -176,53 +79,158 @@ void lcd_print(String first_row, bool is_there_second_row = 0, String second_row
 
 void loop()
 {
-  keypad.getKey();
+  switch(STATE)
+  {
+    case State::OFFLINE:
+      { 
+        digitalWrite(redLed, LOW);
+        digitalWrite(greenLed, LOW);
+        digitalWrite(yellowLed, HIGH);
+        keypad.getKey(); 
 
-  if (sistem == 0)
-  {
-    // alarm is off
-    digitalWrite(greenLed, LOW);
-    digitalWrite(redLed, LOW);
-    digitalWrite(yellowLed, HIGH);
-    // Serial.println("System is OFF !"); // Used for troubleshooting
-  }
-  else
-  {
-    // alarm is on
-    actual_time = millis();
-    if(actual_time - time_wrong_psw > 10000)
-    {
-      time_wrong_psw = 10000000000.;
-      clean_line_lcd(0, 1, "SIREN OFF");
-    }
-    if (blinking == 0)
-      {
-        blinking = 1;
-        blink_func(yellowLed, 500, 5);
+        if (is_psw_correct == 2)
+        {
+          STATE = State::WAITING;
+          //next_STATE = State::PIR_ACTIVATED;
+          previous_STATE = State::OFFLINE;
+          time_change_case = millis();
+          lcd_print("ACTIVATION");
+          
+        }
+        else if (is_psw_correct == 1)
+        {
+          STATE = State::WAITING;
+          //next_STATE = State::INCORRECT;
+          previous_STATE = State::OFFLINE;
+          time_change_case = millis();
+          lcd_print("WRONG, RETRY");
+        }
       }
-    sensorData = digitalRead(sensorz);
-    if(sensorData == HIGH)
+    break;
+
+    case State::WAITING:
     {
-      if (siren_activated == 0)
+      if(previous_STATE == State::OFFLINE &&
+                           is_psw_correct == 2)
       {
-      siren_activated = 1;
-      //Serial.println("Sensor activated, siren activated");
-      lcd_print("ALARM ON", 1, "SIREN ON");
-      digitalWrite(redLed, HIGH);
-      digitalWrite(greenLed, HIGH);
-      digitalWrite(yellowLed, HIGH);
+        handle_waiting(100, greenLed,
+                       5000, State::PIR_ACTIVATED);
+      }
+
+      if(previous_STATE == State::OFFLINE && 
+                           is_psw_correct == 1)
+      {
+        handle_waiting(100, redLed,
+                       1000, State::INCORRECT);
+      }
+
+      if(previous_STATE == State::BUZZER_ACTIVATED &&
+                           is_psw_correct == 2)
+      {
+        handle_waiting(100, greenLed,
+                       5000, State::OFFLINE);
+      }
+
+      if(previous_STATE == State::BUZZER_ACTIVATED &&
+                           is_psw_correct == 1)
+      {
+        handle_waiting(100, redLed,
+                       1000, State::INCORRECT);
+      }
+
+      if(previous_STATE == State::PIR_ACTIVATED &&
+                           is_psw_correct == 2)
+      {
+        handle_waiting(100, greenLed,
+                       2000, State::OFFLINE);
+      }
+
+      if(previous_STATE == State::PIR_ACTIVATED &&
+                           is_psw_correct == 1)
+      {
+        handle_waiting(100, redLed,
+                       500, State::INCORRECT);
       }
     }
-    if (siren_activated == 1)
+    break;
+
+    case State::PIR_ACTIVATED:
+    { 
+      sensorData = digitalRead(sensorz);
+      if (sensorData == HIGH)
+      {
+        STATE = State::BUZZER_ACTIVATED;
+        lcd_print("ALARM ON", 1, "SIREN ON");
+        digitalWrite(redLed, HIGH);
+        digitalWrite(yellowLed, HIGH);
+        digitalWrite(greenLed, HIGH);
+      }
+      else
       {
         keypad.getKey();
+        if (is_psw_correct == 2)
+        {
+          previous_STATE = State::PIR_ACTIVATED;
+          time_change_case = millis();
+          lcd_print("DEACTIVATION");
+          STATE = State::WAITING;
+        }
+        else if (is_psw_correct == 1)
+        {
+          previous_STATE = State::PIR_ACTIVATED;
+          time_change_case = millis();
+          STATE = State::WAITING;
+          lcd_print("ALARM ON", 1, "WRONG, RETRY");
+        }
+      }
+    }
+    break;
+
+    case State::BUZZER_ACTIVATED:
+    {
+      keypad.getKey();
+
         for(double x = 0; x < 0.92; x += 0.01)
           {  // Elegant Alarm Tone
-            tone(buzzer, sinh(x+8.294), 10);
-            delay(1);
-          }   
-      } 
+            time_buzzer = millis();
+            if (time_buzzer - time_buzzer_prev >= 1){
+                time_buzzer_prev = time_buzzer;
+                tone(buzzer, sinh(x+8.294), 10);
+              }
+          }  
+          
+      if (is_psw_correct == 2)
+      {
+        STATE = State::WAITING;
+        previous_STATE = State::BUZZER_ACTIVATED;
+        time_change_case = millis();     
+        lcd_print("ALARM OFF");
+      }
+      else if (is_psw_correct == 1)
+      {
+        STATE = State::WAITING;
+        previous_STATE = State::BUZZER_ACTIVATED;
+        time_change_case = millis();
+      }
+    }
+    break;
+
+    case State::INCORRECT:
+    {
+      STATE = previous_STATE;
+      if (previous_STATE == State::OFFLINE)
+      {
+        lcd_print("ALARM OFF", 1, "WRONG, RETRY");
+      }
+
+      if (previous_STATE == State::BUZZER_ACTIVATED)
+      {
+        lcd_print("ALARM ON", 1, "WRONG, RETRY");
+      }
+    }
+    break;
   }
+
 }
 
 //take care of some special events
@@ -239,7 +247,7 @@ void keypadEvent(KeypadEvent eKey){
     {
       case '*': 
       {
-        checkPassword();
+        is_psw_correct = checkPassword();
         psw_to_print = "";
         break;
       }
@@ -255,57 +263,29 @@ void keypadEvent(KeypadEvent eKey){
 } // LOOP PARENTHESIS
 
 
-void checkPassword(){
+char checkPassword(){
   if (password.evaluate()){
     //Serial.println("Success"); //Used for troubleshooting
-    lcd_print("SUCCESS");
     password.reset();
-    if (sistem == 0)
-    {  
-      digitalWrite(redLed, LOW);
-      digitalWrite(yellowLed, LOW);
-      //Serial.println("Alarm system"); //Used for troubleshooting
-      blink_func(greenLed, 100, 5);
-      sistem = 1;
-      lcd_print("ALARM ON", 1, "SIREN OFF");
-      digitalWrite(greenLed, HIGH);
-    }
-    else
-    {
-      noTone(buzzer);
-      blink_func(yellowLed, 100, 5);
-      lcd.print("ALARM OFF");
-      sistem = 0;
-      siren_activated = 0;
-      blinking = 0;
-    }
+    return 2;
   }
   else{
-    if(sistem == 0)
-    {
-      //Serial.println("Wrong"); //Used for troubleshooting
-      lcd_print("ALARM OFF", 1, "WRONG, RETRY");
-      blink_func(redLed, 100, 5);
-      password.reset();
+    password.reset();
+    return 1;
     }
-    else
-    {
-      lcd_print("ALARM ON", 1, "WRONG, RETRY");
-      time_wrong_psw = millis();
-      blink_func(redLed, 100, 5);
-      password.reset();
-    }
-  }
 }
 
-void blink_func(char Led, int delay_time, int nr_times)
+void blink_func(unsigned long current,
+                unsigned long delay_time,
+                unsigned long previous,
+                int ledPin)
 {
-  for(int i = 0; i != nr_times; i++)
-  {
-    digitalWrite(Led, HIGH);
-    delay(delay_time);
-    digitalWrite(Led, LOW);
-    delay(delay_time);
+  // Check if the interval has elapsed
+  if (current - previous >= delay_time) {
+    // Save the current time as the previous time
+    previousMillis = currentMillis;
+    // Toggle the LED
+    digitalWrite(ledPin, !digitalRead(ledPin));
   }
 }
 
@@ -315,5 +295,55 @@ void clean_line_lcd(int col, int row, String string_to_write)
   lcd.print("                             ");
   lcd.setCursor(col, row);
   lcd.print(string_to_write);
+}
+
+void handle_waiting(unsigned long blink_time, 
+                    int pinLed,
+                    unsigned long interval_to_wait,
+                    State next_STATE){
+  currentMillis = millis();
+  blink_func(currentMillis, 
+             previousMillis,
+             blink_time,
+             pinLed);
+  if ((currentMillis - time_change_case) > interval_to_wait)
+  { 
+    STATE = next_STATE;
+
+    if (next_STATE == State::PIR_ACTIVATED)
+    {
+      lcd_print("ALARM ON", 1, "SIREN OFF");
+      digitalWrite(redLed, LOW);
+      digitalWrite(greenLed, HIGH);
+      digitalWrite(yellowLed, LOW);          
+    }    
+
+    if (next_STATE == State::INCORRECT &&
+        previous_STATE == State::BUZZER_ACTIVATED)
+    {
+      digitalWrite(redLed, HIGH);
+      digitalWrite(greenLed, HIGH);
+      digitalWrite(yellowLed, HIGH);          
+    }    
+
+    if (next_STATE == State::INCORRECT &&
+        previous_STATE == State::PIR_ACTIVATED)
+    {
+      digitalWrite(redLed, LOW);
+      digitalWrite(greenLed, HIGH);
+      digitalWrite(yellowLed, LOW);          
+    }   
+
+    if (next_STATE == State::OFFLINE &&
+        previous_STATE == State::PIR_ACTIVATED)
+    {
+      digitalWrite(redLed, LOW);
+      digitalWrite(greenLed, LOW);
+      digitalWrite(yellowLed, HIGH);      
+      sensorData = LOW;    
+      lcd_print("ALARM OFF");
+    }   
+    is_psw_correct = 0;      
+  }
 }
 
