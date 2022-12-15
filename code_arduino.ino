@@ -1,7 +1,7 @@
-#include <Keypad.h>             // library for keyboard
+#include <Keypad.h>                // library for keyboard
+#include <Password.h>              // library for password
 #include<LiquidCrystal.h>
 #include <string.h> 
-#include <Password.h>
 
 Password password = Password("1234");  // password
 String psw_to_print; 
@@ -28,20 +28,19 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 #define buzzer A4
 
 int sensorData;
+
 LiquidCrystal lcd (0,1,2,3,4,5);
 
 // Create a variable to store the current time
 unsigned long currentMillis;
+
+// Set the interval at which the LED should blink, in milliseconds
+//const unsigned long interval = 1000;
+
 // Create a variable to store the previous time the LED was updated
 unsigned long previousMillis = 0;
-unsigned long time_change_case;
-State STATE = State::OFFLINE;
-State previous_STATE;
-State next_STATE;
-char is_psw_correct = 0;
-unsigned long time_buzzer;
-unsigned long time_buzzer_prev = 0;
 
+unsigned long time_change_case;
 
 enum class State {
   OFFLINE, // initial state
@@ -54,11 +53,13 @@ enum class State {
 void setup()
   {
   keypad.addEventListener(keypadEvent);
+  //Serial.begin(9600);  //Used for troubleshooting
   pinMode(sensorz, INPUT);
   pinMode(redLed, OUTPUT);
   pinMode(yellowLed, OUTPUT);
   pinMode(greenLed, OUTPUT);
   pinMode(buzzer, OUTPUT); 
+  //Serial.println("sistem startup"); //Used for troubleshooting
   lcd.begin(16,2);
   lcd.setCursor(0,0);
   lcd.print("ALARM OFF");
@@ -77,6 +78,13 @@ void lcd_print(String first_row, bool is_there_second_row = 0, String second_row
   }
 }
 
+State STATE = State::OFFLINE;
+State previous_STATE;
+State next_STATE;
+char is_psw_correct = 0;
+unsigned long time_buzzer;
+unsigned long time_buzzer_prev = 0;
+
 void loop()
 {
   switch(STATE)
@@ -94,6 +102,7 @@ void loop()
           //next_STATE = State::PIR_ACTIVATED;
           previous_STATE = State::OFFLINE;
           time_change_case = millis();
+          //Serial.println("activation"); 
           lcd_print("ACTIVATION");
           
         }
@@ -103,6 +112,7 @@ void loop()
           //next_STATE = State::INCORRECT;
           previous_STATE = State::OFFLINE;
           time_change_case = millis();
+          //Serial.println("wrong"); 
           lcd_print("WRONG, RETRY");
         }
       }
@@ -238,11 +248,12 @@ void keypadEvent(KeypadEvent eKey){
   switch (keypad.getState())
   {
     case PRESSED:
-    //Serial.print("Pressed: ");
-    //Serial.println(eKey);
+
     psw_to_print += eKey;
     clean_line_lcd(0, 1, "PIN: ");
     lcd.print(psw_to_print);
+    //Serial.println("PIN: "); 
+    //Serial.println(psw_to_print); 
     switch (eKey)
     {
       case '*': 
@@ -346,4 +357,3 @@ void handle_waiting(unsigned long blink_time,
     is_psw_correct = 0;      
   }
 }
-
