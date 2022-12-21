@@ -1,13 +1,26 @@
-#include <Keypad.h>                // library for keyboard
-#include <Password.h>              // library for password
-#include<LiquidCrystal.h>
+#include <Keypad.h>             
+#include <LiquidCrystal.h>
 #include <string.h> 
+#include <Password.h>
+#include <WiFiNINA.h>
+
+//please enter your sensitive data in the Secret tab
+char ssid[] = SECRET_SSID;
+char pass[] = SECRET_PASSWORD;
+
+WiFiClient client;
+
+char   HOST_NAME[] = "maker.ifttt.com";
+String PATH_NAME   = "/trigger/alarm_on/with/key/cXtsDENM9GH34LAdr78CzSHUpjrfQDEzmjdXFcJryeq"; // change your EVENT-NAME and YOUR-KEY
+String queryString = "?value1=57&value2=25";
+// variables will change:
+bool client_connection = 1; // if the server is connected or not
 
 Password password = Password("1234");  // password
 String psw_to_print; 
 
 const byte rows = 4;                     // four rows       
-const byte cols = 4;                     // three columns
+const byte cols = 4;                     // four columns
 char keys[rows][cols] = {                // keys on keypad
 
 {'1','2','3','A'},
@@ -24,8 +37,8 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 #define sensorz A3      // pin for PIR sensor data
 #define redLed A2        //  pin for red led
 #define greenLed A0        // pin for green led
-#define yellowLed A1    // pin for blue led
-#define buzzer A4
+#define yellowLed A1    // pin for yellow led
+#define buzzer A4       // pin for the buzzer siren
 
 int sensorData;
 
@@ -52,17 +65,18 @@ enum class State {
 
 void setup()
   {
-  keypad.addEventListener(keypadEvent);
-  //Serial.begin(9600);  //Used for troubleshooting
-  pinMode(sensorz, INPUT);
-  pinMode(redLed, OUTPUT);
-  pinMode(yellowLed, OUTPUT);
-  pinMode(greenLed, OUTPUT);
-  pinMode(buzzer, OUTPUT); 
-  //Serial.println("sistem startup"); //Used for troubleshooting
-  lcd.begin(16,2);
-  lcd.setCursor(0,0);
-  lcd.print("ALARM OFF");
+    WiFi.begin(ssid, pass);
+    keypad.addEventListener(keypadEvent);
+    //Serial.begin(9600);  //Used for troubleshooting
+    pinMode(sensorz, INPUT);
+    pinMode(redLed, OUTPUT);
+    pinMode(yellowLed, OUTPUT);
+    pinMode(greenLed, OUTPUT);
+    pinMode(buzzer, OUTPUT); 
+    //Serial.println("sistem startup"); //Used for troubleshooting
+    lcd.begin(16,2);
+    lcd.setCursor(0,0);
+    lcd.print("ALARM OFF");
   }
 
 
@@ -81,9 +95,9 @@ void lcd_print(String first_row, bool is_there_second_row = 0, String second_row
 State STATE = State::OFFLINE;
 State previous_STATE;
 State next_STATE;
-char is_psw_correct = 0;
-unsigned long time_buzzer;
-unsigned long time_buzzer_prev = 0;
+char is_psw_correct = 0; // 0: waiting for password, 1: wrong password, 2: correct password 
+unsigned long time_buzzer; // for blink without delay function
+unsigned long time_buzzer_prev = 0; // previous time for blink without delay
 
 void loop()
 {
@@ -91,6 +105,20 @@ void loop()
   {
     case State::OFFLINE:
       { 
+        // TODO: DECIDERE COSA FARE CON QUESTO PEZZO DI CODICE QUI SOTTO
+        // FORSE È BENE NON FARSI PRINTARE NULLA SULLO SCHERMO E LASCIARE
+        // CHE SI CONNETTA O NO SENZA DIRE NULLA ALL'UTENTE
+        if(client_connection == 0)
+        {
+          if (client.connect(HOST_NAME, 80)) {
+            // if connected:
+            lcd_print("CONNECTED");
+            }
+          else {// if not connected:
+            lcd_print("FAIL CONNECTION");
+            } 
+            client_connection = 1;
+        }
         digitalWrite(redLed, LOW);
         digitalWrite(greenLed, LOW);
         digitalWrite(yellowLed, HIGH);
@@ -102,7 +130,6 @@ void loop()
           //next_STATE = State::PIR_ACTIVATED;
           previous_STATE = State::OFFLINE;
           time_change_case = millis();
-          //Serial.println("activation"); 
           lcd_print("ACTIVATION");
           
         }
@@ -112,7 +139,6 @@ void loop()
           //next_STATE = State::INCORRECT;
           previous_STATE = State::OFFLINE;
           time_change_case = millis();
-          //Serial.println("wrong"); 
           lcd_print("WRONG, RETRY");
         }
       }
@@ -174,6 +200,16 @@ void loop()
         digitalWrite(redLed, HIGH);
         digitalWrite(yellowLed, HIGH);
         digitalWrite(greenLed, HIGH);
+
+        if (client_connection)
+        {
+          client.println("GET " + PATH_NAME + queryString + " HTTP/1.1");
+          client.println("Host: " + String(HOST_NAME));
+          client.println("Connection: close");
+          client.println(); // end HTTP header
+          client.close();
+          client_connection = 0;
+        }
       }
       else
       {
@@ -199,16 +235,17 @@ void loop()
     case State::BUZZER_ACTIVATED:
     {
       keypad.getKey();
-
-        for(double x = 0; x < 0.92; x += 0.01)
-          {  // Elegant Alarm Tone
-            time_buzzer = millis();
-            if (time_buzzer - time_buzzer_prev >= 1){
-                time_buzzer_prev = time_buzzer;
-                tone(buzzer, sinh(x+8.294), 10);
-              }
-          }  
-          
+      
+      for(double x = 0; x < 0.92; x += 0.01)
+        {  // Elegant Alarm Tone
+          time_buzzer = millis();
+          if (time_buzzer - time_buzzer_prev >= 1)
+          {
+            time_buzzer_prev = time_buzzer;
+            tone(buzzer, sinh(x+8.294), 10);
+          }
+        }  
+        
       if (is_psw_correct == 2)
       {
         STATE = State::WAITING;
@@ -248,12 +285,11 @@ void keypadEvent(KeypadEvent eKey){
   switch (keypad.getState())
   {
     case PRESSED:
-
+    //Serial.print("Pressed: ");
+    //Serial.println(eKey);
     psw_to_print += eKey;
     clean_line_lcd(0, 1, "PIN: ");
     lcd.print(psw_to_print);
-    //Serial.println("PIN: "); 
-    //Serial.println(psw_to_print); 
     switch (eKey)
     {
       case '*': 
