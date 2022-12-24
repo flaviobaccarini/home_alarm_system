@@ -3,6 +3,9 @@
 #include <string.h> 
 #include <Password.h>
 #include <WiFiNINA.h>
+#include "definition.h"
+#include "functions.h"
+#include "states.h"
 
 //please enter your sensitive data in the Secret tab
 char ssid[] = SECRET_SSID;
@@ -10,9 +13,6 @@ char pass[] = SECRET_PASSWORD;
 
 WiFiClient client;
 
-char   HOST_NAME[] = "maker.ifttt.com";
-String PATH_NAME   = "/trigger/alarm_on/with/key/cXtsDENM9GH34LAdr78CzSHUpjrfQDEzmjdXFcJryeq"; // change your EVENT-NAME and YOUR-KEY
-String queryString = "?value1=57&value2=25";
 // variables will change:
 bool client_connection = 1; // if the server is connected or not
 
@@ -34,34 +34,23 @@ byte rowPins[rows] = {13,12,11,10};
 byte colPins[cols] = {9,8,7,6};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 
-#define sensorz A3      // pin for PIR sensor data
-#define redLed A2        //  pin for red led
-#define greenLed A0        // pin for green led
-#define yellowLed A1    // pin for yellow led
-#define buzzer A4       // pin for the buzzer siren
-
-int sensorData;
 
 LiquidCrystal lcd (0,1,2,3,4,5);
 
 // Create a variable to store the current time
 unsigned long currentMillis;
 
-// Set the interval at which the LED should blink, in milliseconds
-//const unsigned long interval = 1000;
-
 // Create a variable to store the previous time the LED was updated
 unsigned long previousMillis = 0;
 
 unsigned long time_change_case;
 
-enum class State {
-  OFFLINE, // initial state
-  WAITING, // waiting state
-  PIR_ACTIVATED, // PIR sensor is active
-  BUZZER_ACTIVATED, // BUZZER is active
-  INCORRECT // password is incorrect
-};
+State STATE = State::OFFLINE;
+State previous_STATE;
+State next_STATE;
+char is_psw_correct = 0; // 0: waiting for password, 1: wrong password, 2: correct password 
+unsigned long time_buzzer; // for siren without delay function
+unsigned long time_buzzer_prev = 0; // previous time for siren without delay
 
 void setup()
   {
@@ -79,25 +68,6 @@ void setup()
     lcd.print("ALARM OFF");
   }
 
-
-void lcd_print(String first_row, bool is_there_second_row = 0, String second_row = "")
-{
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(first_row);
-  if(is_there_second_row)
-  {
-    lcd.setCursor(0, 1);
-    lcd.print(second_row);
-  }
-}
-
-State STATE = State::OFFLINE;
-State previous_STATE;
-State next_STATE;
-char is_psw_correct = 0; // 0: waiting for password, 1: wrong password, 2: correct password 
-unsigned long time_buzzer; // for blink without delay function
-unsigned long time_buzzer_prev = 0; // previous time for blink without delay
 
 void loop()
 {
@@ -119,9 +89,10 @@ void loop()
             } 
             client_connection = 1;
         }
-        digitalWrite(redLed, LOW);
-        digitalWrite(greenLed, LOW);
-        digitalWrite(yellowLed, HIGH);
+        digital_write_three_leds(redState = LOW, yellowState = HIGH, greenState = LOW);
+        //digitalWrite(redLed, LOW);
+        //digitalWrite(greenLed, LOW);
+        //digitalWrite(yellowLed, HIGH);
         keypad.getKey(); 
 
         if (is_psw_correct == 2)
@@ -197,9 +168,10 @@ void loop()
       {
         STATE = State::BUZZER_ACTIVATED;
         lcd_print("ALARM ON", 1, "SIREN ON");
-        digitalWrite(redLed, HIGH);
-        digitalWrite(yellowLed, HIGH);
-        digitalWrite(greenLed, HIGH);
+        digital_write_three_leds(redState = HIGH, yellowState = HIGH, greenState = HIGH);
+        //digitalWrite(redLed, HIGH);
+        //digitalWrite(yellowLed, HIGH);
+        //digitalWrite(greenLed, HIGH);
 
         if (client_connection)
         {
@@ -278,118 +250,4 @@ void loop()
     break;
   }
 
-}
-
-//take care of some special events
-void keypadEvent(KeypadEvent eKey){
-  switch (keypad.getState())
-  {
-    case PRESSED:
-    //Serial.print("Pressed: ");
-    //Serial.println(eKey);
-    psw_to_print += eKey;
-    clean_line_lcd(0, 1, "PIN: ");
-    lcd.print(psw_to_print);
-    switch (eKey)
-    {
-      case '*': 
-      {
-        is_psw_correct = checkPassword();
-        psw_to_print = "";
-        break;
-      }
-      case '#':
-      {
-        password.reset(); 
-        psw_to_print = "";
-        break;
-      } 
-      default: password.append(eKey);
-    }
-  }
-} // LOOP PARENTHESIS
-
-
-char checkPassword(){
-  if (password.evaluate()){
-    //Serial.println("Success"); //Used for troubleshooting
-    password.reset();
-    return 2;
-  }
-  else{
-    password.reset();
-    return 1;
-    }
-}
-
-void blink_func(unsigned long current,
-                unsigned long delay_time,
-                unsigned long previous,
-                int ledPin)
-{
-  // Check if the interval has elapsed
-  if (current - previous >= delay_time) {
-    // Save the current time as the previous time
-    previousMillis = currentMillis;
-    // Toggle the LED
-    digitalWrite(ledPin, !digitalRead(ledPin));
-  }
-}
-
-void clean_line_lcd(int col, int row, String string_to_write)
-{
-  lcd.setCursor(col, row);
-  lcd.print("                             ");
-  lcd.setCursor(col, row);
-  lcd.print(string_to_write);
-}
-
-void handle_waiting(unsigned long blink_time, 
-                    int pinLed,
-                    unsigned long interval_to_wait,
-                    State next_STATE){
-  currentMillis = millis();
-  blink_func(currentMillis, 
-             previousMillis,
-             blink_time,
-             pinLed);
-  if ((currentMillis - time_change_case) > interval_to_wait)
-  { 
-    STATE = next_STATE;
-
-    if (next_STATE == State::PIR_ACTIVATED)
-    {
-      lcd_print("ALARM ON", 1, "SIREN OFF");
-      digitalWrite(redLed, LOW);
-      digitalWrite(greenLed, HIGH);
-      digitalWrite(yellowLed, LOW);          
-    }    
-
-    if (next_STATE == State::INCORRECT &&
-        previous_STATE == State::BUZZER_ACTIVATED)
-    {
-      digitalWrite(redLed, HIGH);
-      digitalWrite(greenLed, HIGH);
-      digitalWrite(yellowLed, HIGH);          
-    }    
-
-    if (next_STATE == State::INCORRECT &&
-        previous_STATE == State::PIR_ACTIVATED)
-    {
-      digitalWrite(redLed, LOW);
-      digitalWrite(greenLed, HIGH);
-      digitalWrite(yellowLed, LOW);          
-    }   
-
-    if (next_STATE == State::OFFLINE &&
-        previous_STATE == State::PIR_ACTIVATED)
-    {
-      digitalWrite(redLed, LOW);
-      digitalWrite(greenLed, LOW);
-      digitalWrite(yellowLed, HIGH);      
-      sensorData = LOW;    
-      lcd_print("ALARM OFF");
-    }   
-    is_psw_correct = 0;      
-  }
 }
