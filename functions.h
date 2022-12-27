@@ -1,18 +1,19 @@
-#ifndef FUNCTIONS_H_INCLUDED
-#define FUNCTIONS_H_INCLUDED
+#include <String.h>
+#include <Password.h>
+#include <LiquidCrystal.h>
+#include "definitions.h"
+#include "states.h"
 
-void keypadEvent(KeypadEvent eKey);
+#ifndef FUNCTIONS_H
+#define FUNCTIONS_H
 char checkPassword();
+void clean_line_lcd(int col, int row, String string_to_write);
+void lcd_print(String first_row, bool is_there_second_row = 0, String second_row = "");
+void digital_three_led_pins(bool redState, bool yellowState, bool greenState);
+
 void blink_func(unsigned long current,
                 unsigned long delay_time,
                 unsigned long previous,
                 int ledPin);
-void lcd_print(String first_row, bool is_there_second_row = 0, String second_row = "");
-void clean_line_lcd(int col, int row, String string_to_write);
-void handle_waiting(unsigned long blink_time, 
-                    int pinLed,
-                    unsigned long interval_to_wait,
-                    State next_STATE);
-void digital_write_three_leds(int redState, int yellowState, int greenState);
 
 #endif

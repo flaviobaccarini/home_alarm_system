@@ -1,101 +1,73 @@
-#include <Keypad.h>             
+#include <Adafruit_Keypad.h>             
 #include <LiquidCrystal.h>
 #include <string.h> 
 #include <Password.h>
 #include <WiFiNINA.h>
-#include "definition.h"
+#include "arduino_secrets.h"
 #include "functions.h"
+#include "customkeypad.h"
+#include "wifi_http_request.h"
+#include "definitions.h"
 #include "states.h"
 
-//please enter your sensitive data in the Secret tab
-char ssid[] = SECRET_SSID;
-char pass[] = SECRET_PASSWORD;
+char   HOST_NAME[] = "maker.ifttt.com";
+String PATH_NAME   = "/trigger/alarm_on/with/key/cXtsDENM9GH34LAdr78CzSHUpjrfQDEzmjdXFcJryeq"; // change your EVENT-NAME and YOUR-KEY
+String queryString = "?value1=57&value2=25";
+Wifi_http_request client = Wifi_http_request(HOST_NAME, PATH_NAME, queryString, blueLed_for_wifi);
 
-WiFiClient client;
-
-// variables will change:
-bool client_connection = 1; // if the server is connected or not
-
-Password password = Password("1234");  // password
-String psw_to_print; 
-
-const byte rows = 4;                     // four rows       
-const byte cols = 4;                     // four columns
-char keys[rows][cols] = {                // keys on keypad
-
-{'1','2','3','A'},
-{'4','5','6','B'},
-{'7','8','9','C'},
-{'*','0','#','D'},
-
-};
-
-byte rowPins[rows] = {13,12,11,10};
-byte colPins[cols] = {9,8,7,6};
-Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
-
-
-LiquidCrystal lcd (0,1,2,3,4,5);
+extern Password password = Password("1234");  // password
+extern LiquidCrystal lcd (rs,en,d4,d3,d2,d1);
 
 // Create a variable to store the current time
-unsigned long currentMillis;
-
+extern unsigned long currentMillis = 100; // for blink without delay funct
 // Create a variable to store the previous time the LED was updated
-unsigned long previousMillis = 0;
-
+extern unsigned long previousMillis = 0; // for blink without delay funct
 unsigned long time_change_case;
+unsigned long time_buzzer; // for buzzer without delay function
+unsigned long time_buzzer_prev = 0; // previous time for buzzer without delay
 
+byte rowPins[4] = {r1, r2, r3, r4}; //connect to the row pinouts of the keypad
+byte colPins[4] = {c1, c2, c3, c4}; //connect to the column pinouts of the keypad
+CustomKeypad customKeypad = CustomKeypad(rowPins, colPins); 
+
+int sensorData = 0;
 State STATE = State::OFFLINE;
 State previous_STATE;
-State next_STATE;
-char is_psw_correct = 0; // 0: waiting for password, 1: wrong password, 2: correct password 
-unsigned long time_buzzer; // for siren without delay function
-unsigned long time_buzzer_prev = 0; // previous time for siren without delay
 
 void setup()
   {
-    WiFi.begin(ssid, pass);
-    keypad.addEventListener(keypadEvent);
+    client.begin();
+    customKeypad.begin();
     //Serial.begin(9600);  //Used for troubleshooting
     pinMode(sensorz, INPUT);
     pinMode(redLed, OUTPUT);
     pinMode(yellowLed, OUTPUT);
     pinMode(greenLed, OUTPUT);
     pinMode(buzzer, OUTPUT); 
+    pinMode(blueLed_for_wifi, OUTPUT);
     //Serial.println("sistem startup"); //Used for troubleshooting
     lcd.begin(16,2);
     lcd.setCursor(0,0);
     lcd.print("ALARM OFF");
+    client.connection();
   }
 
 
 void loop()
 {
+  customKeypad.tick();
   switch(STATE)
   {
     case State::OFFLINE:
       { 
-        // TODO: DECIDERE COSA FARE CON QUESTO PEZZO DI CODICE QUI SOTTO
-        // FORSE È BENE NON FARSI PRINTARE NULLA SULLO SCHERMO E LASCIARE
-        // CHE SI CONNETTA O NO SENZA DIRE NULLA ALL'UTENTE
-        if(client_connection == 0)
+        if(client.client_connection == 0)
         {
-          if (client.connect(HOST_NAME, 80)) {
-            // if connected:
-            lcd_print("CONNECTED");
-            }
-          else {// if not connected:
-            lcd_print("FAIL CONNECTION");
-            } 
-            client_connection = 1;
+          client.connection();
         }
-        digital_write_three_leds(redState = LOW, yellowState = HIGH, greenState = LOW);
-        //digitalWrite(redLed, LOW);
-        //digitalWrite(greenLed, LOW);
-        //digitalWrite(yellowLed, HIGH);
-        keypad.getKey(); 
+        digital_three_led_pins(LOW, HIGH, LOW);
+        customKeypad.keypad_reading();
 
-        if (is_psw_correct == 2)
+        if (customKeypad.is_psw_correct == 2)
         {
           STATE = State::WAITING;
           //next_STATE = State::PIR_ACTIVATED;
@@ -104,7 +76,7 @@ void loop()
           lcd_print("ACTIVATION");
           
         }
-        else if (is_psw_correct == 1)
+        else if (customKeypad.is_psw_correct == 1)
         {
           STATE = State::WAITING;
           //next_STATE = State::INCORRECT;
@@ -118,42 +90,42 @@ void loop()
     case State::WAITING:
     {
       if(previous_STATE == State::OFFLINE &&
-                           is_psw_correct == 2)
+                           customKeypad.is_psw_correct == 2)
       {
         handle_waiting(100, greenLed,
                        5000, State::PIR_ACTIVATED);
       }
 
       if(previous_STATE == State::OFFLINE && 
-                           is_psw_correct == 1)
+                           customKeypad.is_psw_correct == 1)
       {
         handle_waiting(100, redLed,
                        1000, State::INCORRECT);
       }
 
       if(previous_STATE == State::BUZZER_ACTIVATED &&
-                           is_psw_correct == 2)
+                           customKeypad.is_psw_correct == 2)
       {
         handle_waiting(100, greenLed,
                        5000, State::OFFLINE);
       }
 
       if(previous_STATE == State::BUZZER_ACTIVATED &&
-                           is_psw_correct == 1)
+                           customKeypad.is_psw_correct == 1)
       {
         handle_waiting(100, redLed,
                        1000, State::INCORRECT);
       }
 
       if(previous_STATE == State::PIR_ACTIVATED &&
-                           is_psw_correct == 2)
+                           customKeypad.is_psw_correct == 2)
       {
         handle_waiting(100, greenLed,
                        2000, State::OFFLINE);
       }
 
       if(previous_STATE == State::PIR_ACTIVATED &&
-                           is_psw_correct == 1)
+                           customKeypad.is_psw_correct == 1)
       {
         handle_waiting(100, redLed,
                        500, State::INCORRECT);
@@ -168,32 +140,19 @@ void loop()
       {
         STATE = State::BUZZER_ACTIVATED;
         lcd_print("ALARM ON", 1, "SIREN ON");
-        digital_write_three_leds(redState = HIGH, yellowState = HIGH, greenState = HIGH);
-        //digitalWrite(redLed, HIGH);
-        //digitalWrite(yellowLed, HIGH);
-        //digitalWrite(greenLed, HIGH);
-
-        if (client_connection)
-        {
-          client.println("GET " + PATH_NAME + queryString + " HTTP/1.1");
-          client.println("Host: " + String(HOST_NAME));
-          client.println("Connection: close");
-          client.println(); // end HTTP header
-          client.close();
-          client_connection = 0;
-        }
+        digital_three_led_pins(HIGH, HIGH, HIGH);
       }
       else
       {
-        keypad.getKey();
-        if (is_psw_correct == 2)
+        customKeypad.keypad_reading();
+        if (customKeypad.is_psw_correct == 2)
         {
           previous_STATE = State::PIR_ACTIVATED;
           time_change_case = millis();
           lcd_print("DEACTIVATION");
           STATE = State::WAITING;
         }
-        else if (is_psw_correct == 1)
+        else if (customKeypad.is_psw_correct == 1)
         {
           previous_STATE = State::PIR_ACTIVATED;
           time_change_case = millis();
@@ -206,7 +165,7 @@ void loop()
 
     case State::BUZZER_ACTIVATED:
     {
-      keypad.getKey();
+      customKeypad.keypad_reading();
       
       for(double x = 0; x < 0.92; x += 0.01)
         {  // Elegant Alarm Tone
@@ -214,18 +173,23 @@ void loop()
           if (time_buzzer - time_buzzer_prev >= 1)
           {
             time_buzzer_prev = time_buzzer;
-            tone(buzzer, sinh(x+8.294), 10);
+            tone(buzzer, 1000, 10);
           }
         }  
         
-      if (is_psw_correct == 2)
+        if (client.client_connection)
+        {
+          client.send_http_request();
+          client.stop();
+        }
+      if (customKeypad.is_psw_correct == 2)
       {
         STATE = State::WAITING;
         previous_STATE = State::BUZZER_ACTIVATED;
         time_change_case = millis();     
         lcd_print("ALARM OFF");
       }
-      else if (is_psw_correct == 1)
+      else if (customKeypad.is_psw_correct == 1)
       {
         STATE = State::WAITING;
         previous_STATE = State::BUZZER_ACTIVATED;
@@ -251,3 +215,48 @@ void loop()
   }
 
 }
+
+
+void handle_waiting(unsigned long blink_time, 
+                    int pinLed,
+                    unsigned long interval_to_wait,
+                    State next_STATE){
+  currentMillis = millis();
+  blink_func(currentMillis, 
+             previousMillis,
+             blink_time,
+             pinLed);
+  if ((currentMillis - time_change_case) > interval_to_wait)
+  { 
+    STATE = next_STATE;
+
+    if (next_STATE == State::PIR_ACTIVATED)
+    {
+      lcd_print("ALARM ON", 1, "SIREN OFF");
+      digital_three_led_pins(LOW, LOW, HIGH);    
+    }    
+
+    if (next_STATE == State::INCORRECT &&
+        previous_STATE == State::BUZZER_ACTIVATED)
+    {
+      digital_three_led_pins(HIGH, HIGH, HIGH);         
+    }    
+
+    if (next_STATE == State::INCORRECT &&
+        previous_STATE == State::PIR_ACTIVATED)
+    {
+      digital_three_led_pins(LOW, LOW, HIGH);             
+    }   
+
+    if (next_STATE == State::OFFLINE &&
+        previous_STATE == State::PIR_ACTIVATED)
+    {
+      digital_three_led_pins(LOW, HIGH, LOW);      
+      sensorData = LOW;    
+      lcd_print("ALARM OFF");
+    }   
+    customKeypad.is_psw_correct = 0;      
+  }
+}
+
+
