@@ -38,7 +38,7 @@ void setup()
   {
     client.begin();
     customKeypad.begin();
-    //Serial.begin(9600);  //Used for troubleshooting
+    Serial.begin(9600);  //Used for troubleshooting
     pinMode(sensorz, INPUT);
     pinMode(redLed, OUTPUT);
     pinMode(yellowLed, OUTPUT);
@@ -49,7 +49,7 @@ void setup()
     lcd.begin(16,2);
     lcd.setCursor(0,0);
     lcd.print("ALARM OFF");
-    client.connection();
+    //client.connection();
   }
 
 
@@ -60,10 +60,7 @@ void loop()
   {
     case State::OFFLINE:
       { 
-        if(client.client_connection == 0)
-        {
-          client.connection();
-        }
+        client.conditions_to_connect();
         digital_three_led_pins(LOW, HIGH, LOW);
         customKeypad.keypad_reading();
 
@@ -139,7 +136,7 @@ void loop()
       if (sensorData == HIGH)
       {
         STATE = State::BUZZER_ACTIVATED;
-        lcd_print("ALARM ON", 1, "SIREN ON");
+        lcd_print("ALARM ON", 1, "BUZZER ON");
         digital_three_led_pins(HIGH, HIGH, HIGH);
       }
       else
@@ -173,7 +170,7 @@ void loop()
           if (time_buzzer - time_buzzer_prev >= 1)
           {
             time_buzzer_prev = time_buzzer;
-            tone(buzzer, 1000, 10);
+            tone(buzzer, sinh(x+8.294),   10);
           }
         }  
         
@@ -187,7 +184,7 @@ void loop()
         STATE = State::WAITING;
         previous_STATE = State::BUZZER_ACTIVATED;
         time_change_case = millis();     
-        lcd_print("ALARM OFF");
+        lcd_print("DEACTIVATION");
       }
       else if (customKeypad.is_psw_correct == 1)
       {
@@ -232,7 +229,7 @@ void handle_waiting(unsigned long blink_time,
 
     if (next_STATE == State::PIR_ACTIVATED)
     {
-      lcd_print("ALARM ON", 1, "SIREN OFF");
+      lcd_print("ALARM ON", 1, "BUZZER OFF");
       digital_three_led_pins(LOW, LOW, HIGH);    
     }    
 
@@ -249,12 +246,15 @@ void handle_waiting(unsigned long blink_time,
     }   
 
     if (next_STATE == State::OFFLINE &&
-        previous_STATE == State::PIR_ACTIVATED)
+        (previous_STATE == State::PIR_ACTIVATED ||
+         previous_STATE == State::BUZZER_ACTIVATED)
+       )
     {
       digital_three_led_pins(LOW, HIGH, LOW);      
       sensorData = LOW;    
       lcd_print("ALARM OFF");
     }   
+
     customKeypad.is_psw_correct = 0;      
   }
 }

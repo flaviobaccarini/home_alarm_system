@@ -7,14 +7,14 @@
 #define yellowLed 3    // pin for blue led
 #define buzzer A6
 #define blueLed_for_wifi A7
-#define r1 12
-#define r2 11
-#define r3 10
-#define r4 9
-#define c1 8
-#define c2 7
-#define c3 6
-#define c4 5
+#define c4 12
+#define c3 11
+#define c2 10
+#define c1 9
+#define r4 8
+#define r3 7
+#define r2 6
+#define r1 5
 #define rs A0
 #define en A1
 #define d4 A2

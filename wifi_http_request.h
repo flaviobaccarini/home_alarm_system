@@ -14,6 +14,8 @@ class Wifi_http_request{
     int blueled_for_Wifi_;
     char* ssid;
     char* pass;
+    int delay_time_for_reconnection = 20000;
+    unsigned long time_stop, time_connection;
 
   public:
     bool client_connection = 0; // if the server is connected or not
@@ -22,5 +24,6 @@ class Wifi_http_request{
     void send_http_request();
     void begin();
     void stop();
+    void conditions_to_connect();
 };
 #endif

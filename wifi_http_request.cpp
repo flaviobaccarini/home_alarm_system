@@ -16,10 +16,12 @@ void Wifi_http_request::connection()
   {
     client_connection = 1;
     digitalWrite(blueled_for_Wifi_, HIGH);
+    Serial.println("Connected to server");
   }
   else
   {
     digitalWrite(blueled_for_Wifi_, LOW);
+    Serial.println("Connection failed");
   }
 }
 
@@ -40,8 +42,10 @@ void Wifi_http_request::send_http_request()
     {
     // read an incoming byte from the server and print it to serial monitor:
       char c = client.read();
+      Serial.print(c);
     }
   }
+  Serial.print('\n');
 }
 
 void Wifi_http_request::stop()
@@ -49,4 +53,13 @@ void Wifi_http_request::stop()
   client.stop();
   client_connection = 0;
   digitalWrite(blueled_for_Wifi_, LOW);
+  time_stop = millis();
+}
+
+void Wifi_http_request::conditions_to_connect(){
+    time_connection = millis();
+    if((client_connection == 0) && ((time_connection - time_stop) > delay_time_for_reconnection))
+    {
+      connection();
+    }
 }
