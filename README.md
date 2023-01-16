@@ -15,6 +15,8 @@ the red LED blinks, instead if it's correct the green LED blinks. If the yellow 
 some inputs from the user.
 The white LED is for the WiFi connection: if the LED is ON Arduino is correctly connected to the WiFI.
 The LCD display is used to visualize some messages about the system status.
+In the folder [motion_sensor_alarm_with_wifi](https://github.com/flaviobaccarini/home_alarm_system/tree/main/motion_sensor_alarm_with_wifi) we can find
+all the C++ code for programming the Arduino board.
 
 ## Finite State Machine
 The system is modeled as Finite State Machine (FSM).
