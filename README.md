@@ -10,13 +10,15 @@ Here we can see the schematics:
 <p align="center">
 <img src="https://github.com/flaviobaccarini/home_alarm_system/blob/main/schematics/SCHEMATICS_bb.svg" alt="Schematics" width="500"/>
 </p>
+
 Three LEDs (red, yellow, green) are used to control the system: for example if the password typed by the user is wrong
 the red LED blinks, instead if it's correct the green LED blinks. If the yellow LED is ON it means that the system waits
 some inputs from the user.
 The white LED is for the WiFi connection: if the LED is ON Arduino is correctly connected to the WiFI.
 The LCD display is used to visualize some messages about the system status.
-In the folder [motion_sensor_alarm_with_wifi](https://github.com/flaviobaccarini/home_alarm_system/tree/main/motion_sensor_alarm_with_wifi) we can find
-all the C++ code for programming the Arduino board.
+In the folder 
+<a href="https://github.com/flaviobaccarini/home_alarm_system/tree/main/motion_sensor_alarm_with_wifi" target="_top">motion_sensor_alarm_with_wifi</a>
+we can find all the C++ code that we need to program the Arduino board.
 
 ## Finite State Machine
 The system is modeled as Finite State Machine (FSM).
@@ -43,5 +45,5 @@ in the folder [images_and_videos](https://github.com/flaviobaccarini/home_alarm_
 that are present in the static PDF to better understand what is the working principle of the overall system.
 
 <p align="center">
-<img src="https://github.com/flaviobaccarini/home_alarm_system/blob/main/slides/images_video/SYSTEM.jpg" alt="Schematics" width="500"/>
+<img src="https://github.com/flaviobaccarini/home_alarm_system/blob/main/slides/images_video/SYSTEM.jpg" alt="overall_system" width="500"/>
 </p>
