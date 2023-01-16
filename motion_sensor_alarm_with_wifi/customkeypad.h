@@ -12,11 +12,11 @@ class CustomKeypad{
             {'*','0','#','D'},
         };
         Adafruit_Keypad keypad_;
-        String psw_to_print;
-        unsigned long time_keypad_reading, previous_time_keypad_reading = 0;
+        String psw_to_print; //password that will be printed in the LCD
+        unsigned long time_keypad_reading, previous_time_keypad_reading = 0; //avoid delay function with these two variables
         void KeypadEventfunc(keypadEvent eKey);
     public:
-        char is_psw_correct = 0;
+        char is_psw_correct = 0; //0: wait for the password, 1: wrong password, 2: correct password
         void begin();
         void tick();
         CustomKeypad(byte rowPins[4], byte colPins[4]);
